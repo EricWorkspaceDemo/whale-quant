@@ -1,0 +1,26 @@
+{
+  "trade_id": "TRADE_20260523_001",
+  "symbol": "BTCUSDT",
+  "side": "LONG",
+  "entry_price": 45000,
+  "exit_price": 46500,
+  "entry_time": "2026-05-23T10:30:00Z",
+  "exit_time": "2026-05-23T14:15:00Z",
+  "position_size": 1.0,
+  "pnl": 1500,
+  "roi": 3.33,
+  "roi_percent": 3.33,
+  "strategy": "trend_following",
+  "entry_reason": "Bullish confluence at support",
+  "exit_reason": "Take profit hit at resistance",
+  "lessons_learned": [
+    "Strong confluence proved reliable",
+    "Exit timing was optimal",
+    "Risk management worked as planned"
+  ],
+  "improvements": [
+    "Consider scaling out at intermediate targets",
+    "Monitor funding rate changes"
+  ],
+  "timestamp": "2026-05-23T14:15:00Z"
+}

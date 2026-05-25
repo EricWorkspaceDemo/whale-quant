@@ -1,0 +1,61 @@
+name: Trade Exit Workflow
+description: Handle trade exits based on signals and management rules
+triggered_by: signal_or_schedule
+
+steps:
+  - name: check_position
+    agent: execution
+    input:
+      symbol: "{{ symbol }}"
+      action: get_position
+
+  - name: evaluate_exit
+    agent: trader
+    depends_on: check_position
+    input:
+      position: "{{ check_position.output }}"
+      current_price: "{{ current_price }}"
+      entry_price: "{{ entry_price }}"
+
+  - name: assess_risk
+    agent: risk
+    depends_on: evaluate_exit
+    input:
+      position: "{{ check_position.output }}"
+      exit_signal: "{{ evaluate_exit.output }}"
+
+  - name: determine_action
+    action: conditional
+    depends_on: assess_risk
+    conditions:
+      - condition: "{{ evaluate_exit.signal == 'TAKE_PROFIT' }}"
+        action: execute_full_exit
+      - condition: "{{ evaluate_exit.signal == 'PARTIAL_EXIT' }}"
+        action: execute_partial_exit
+      - condition: "{{ assess_risk.risk_level >= 'CRITICAL' }}"
+        action: execute_emergency_exit
+      - condition: "{{ evaluate_exit.signal == 'HOLD' }}"
+        action: monitor_position
+
+  - name: execute_exit
+    agent: execution
+    depends_on: determine_action
+    input:
+      position: "{{ check_position.output }}"
+      exit_type: "{{ determine_action.action }}"
+      exit_reason: "{{ evaluate_exit.reason }}"
+
+  - name: review_trade
+    agent: reviewer
+    depends_on: execute_exit
+    input:
+      trade_result: "{{ execute_exit.output }}"
+
+notifications:
+  - on: exit_completed
+    type: slack
+    message: "Trade closed: {{ symbol }} P&L: {{ pnl }}%"
+
+  - on: partial_exit
+    type: log
+    message: "Partial exit executed for {{ symbol }}"

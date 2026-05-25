@@ -1,0 +1,59 @@
+name: Emergency Stop Workflow
+description: Immediate trading halt and position closure
+triggered_by: emergency_alert
+
+priority: critical
+timeout: 30s
+
+steps:
+  - name: alert_team
+    action: notify
+    input:
+      channels:
+        - slack
+        - email
+      message: "EMERGENCY STOP TRIGGERED: {{ reason }}"
+
+  - name: get_all_positions
+    agent: execution
+    input:
+      action: get_all_positions
+
+  - name: cancel_orders
+    agent: execution
+    depends_on: get_all_positions
+    input:
+      action: cancel_all_orders
+
+  - name: close_positions
+    agent: execution
+    depends_on: cancel_orders
+    parallel: true
+    input:
+      positions: "{{ get_all_positions.output }}"
+      close_type: market_order
+      urgency: immediate
+
+  - name: freeze_trading
+    action: update_config
+    depends_on: close_positions
+    input:
+      trading_enabled: false
+
+  - name: generate_report
+    action: store_memory
+    depends_on: freeze_trading
+    input:
+      type: emergency
+      reason: "{{ reason }}"
+      positions_closed: "{{ close_positions.count }}"
+      timestamp: "{{ now }}"
+
+notifications:
+  - on: completion
+    type: critical_alert
+    channels:
+      - slack
+      - pagerduty
+      - email
+    message: "Emergency stop completed. All positions closed. Manual review required."

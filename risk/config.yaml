@@ -1,0 +1,56 @@
+# Risk Management Configuration
+
+trading:
+  enabled: true
+  max_positions: 5
+  max_position_size: 10000 # USDT
+  max_total_exposure: 50000 # USDT
+  max_leverage: 5
+  risk_per_trade: 0.02 # 2% of account
+  max_daily_loss: 0.05 # Stop trading if -5% daily loss
+
+account:
+  initial_balance: 10000
+  maintenance_margin_ratio: 0.05
+  margin_call_ratio: 0.1
+
+positions:
+  max_correlation: 0.7 # Max correlation between positions
+  min_liquidity: 1000000 # Min order book depth
+  max_holding_time: 30 # days
+  emergency_close_threshold: 0.3 # Close at -30% loss
+
+leverage:
+  default: 2
+  max: 5
+  by_symbol:
+    BTCUSDT: 3
+    ETHUSDT: 3
+    ALTCOINS: 2
+
+stop_loss:
+  default_percentage: 0.05 # 5%
+  minimum_percentage: 0.02 # 2%
+  trailing_stop: true
+  trailing_stop_percentage: 0.03 # 3%
+
+take_profit:
+  partial_close: true
+  targets:
+    - percentage: 0.50 # Close 50% at 2% profit
+      profit: 0.02
+    - percentage: 0.30 # Close 30% at 5% profit
+      profit: 0.05
+    - percentage: 0.20 # Close 20% at 10% profit
+      profit: 0.10
+
+circuit_breaker:
+  daily_loss_threshold: 0.05 # -5% daily
+  weekly_loss_threshold: 0.10 # -10% weekly
+  monthly_loss_threshold: 0.20 # -20% monthly
+  action: halt_trading # halt_trading or reduce_position_size
+
+api_limits:
+  max_requests_per_minute: 1200
+  max_orders_per_minute: 100
+  timeout_ms: 5000

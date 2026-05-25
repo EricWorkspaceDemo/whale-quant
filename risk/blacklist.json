@@ -1,0 +1,17 @@
+{
+  "symbols": [
+    "SHIB",
+    "DOGE",
+    "PEPE",
+    "FLOKI"
+  ],
+  "exchanges": [],
+  "reasons": {
+    "SHIB": "High volatility, low liquidity",
+    "DOGE": "Meme coin, unpredictable",
+    "PEPE": "New token, extreme volatility",
+    "FLOKI": "Highly correlated with DOGE"
+  },
+  "updated_at": "2026-05-23T00:00:00Z",
+  "notes": "Update blacklist regularly based on market conditions and risk profile"
+}

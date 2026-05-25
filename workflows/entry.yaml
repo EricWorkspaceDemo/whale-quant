@@ -1,0 +1,57 @@
+name: Trade Entry Workflow
+description: Complete workflow for identifying and entering a trade
+triggered_by: user_request
+
+steps:
+  - name: validate_opportunity
+    agent: strategist
+    input:
+      symbol: "{{ symbol }}"
+      strategy: "{{ strategy }}"
+      market_data: "{{ market_data }}"
+
+  - name: trader_decision
+    agent: trader
+    depends_on: validate_opportunity
+    input:
+      symbol: "{{ symbol }}"
+      strategy_confirmation: "{{ validate_opportunity.output }}"
+      current_price: "{{ current_price }}"
+
+  - name: risk_assessment
+    agent: risk
+    depends_on: trader_decision
+    input:
+      proposed_trade: "{{ trader_decision.output }}"
+      portfolio: "{{ portfolio_state }}"
+      limits: "{{ risk_limits }}"
+
+  - name: approval_gate
+    action: require_approval
+    depends_on: risk_assessment
+    condition: "{{ risk_assessment.risk_level >= 'HIGH' }}"
+    input:
+      risk_report: "{{ risk_assessment.output }}"
+
+  - name: execute_order
+    agent: execution
+    depends_on: approval_gate
+    input:
+      trade_plan: "{{ trader_decision.output }}"
+      execution_strategy: "market_order"
+
+  - name: confirm_entry
+    action: store_memory
+    depends_on: execute_order
+    input:
+      type: trades
+      data: "{{ execute_order.output }}"
+
+notifications:
+  - on: entry_executed
+    type: slack
+    message: "Trade entered: {{ symbol }} {{ side }} @ {{ entry_price }}"
+
+  - on: risk_warning
+    type: alert
+    message: "High risk trade: {{ risk_assessment.warning }}"

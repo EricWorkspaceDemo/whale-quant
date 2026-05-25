@@ -1,0 +1,40 @@
+{
+  "position_limits": {
+    "BTCUSDT": {
+      "max_size": 5000,
+      "max_leverage": 3,
+      "min_liquidity": 5000000
+    },
+    "ETHUSDT": {
+      "max_size": 5000,
+      "max_leverage": 3,
+      "min_liquidity": 3000000
+    },
+    "BNBUSDT": {
+      "max_size": 3000,
+      "max_leverage": 2,
+      "min_liquidity": 1000000
+    },
+    "SOLUSDT": {
+      "max_size": 2000,
+      "max_leverage": 2,
+      "min_liquidity": 500000
+    },
+    "DEFAULT": {
+      "max_size": 1000,
+      "max_leverage": 2,
+      "min_liquidity": 100000
+    }
+  },
+  "correlation_limits": {
+    "BTC_correlation_max": 0.8,
+    "sector_exposure_max": 0.4,
+    "altcoin_exposure_max": 0.3
+  },
+  "temporal_limits": {
+    "max_trade_duration_hours": 168,
+    "min_trade_duration_seconds": 60,
+    "reentry_cooldown_seconds": 300
+  },
+  "updated_at": "2026-05-23T00:00:00Z"
+}

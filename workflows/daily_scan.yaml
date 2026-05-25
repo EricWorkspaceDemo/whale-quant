@@ -1,0 +1,43 @@
+name: Daily Market Scan
+description: Run daily market analysis to identify trading opportunities
+schedule: "0 9 * * *"
+
+steps:
+  - name: fetch_market_data
+    agent: strategist
+    input:
+      symbols:
+        - BTCUSDT
+        - ETHUSDT
+        - BNBUSDT
+        - SOLUSDT
+
+  - name: analyze_market
+    agent: strategist
+    depends_on: fetch_market_data
+    input:
+      market_data: "{{ fetch_market_data.output }}"
+
+  - name: generate_report
+    agent: reviewer
+    depends_on: analyze_market
+    input:
+      analysis: "{{ analyze_market.output }}"
+
+  - name: store_results
+    action: store_memory
+    depends_on: generate_report
+    input:
+      type: market
+      data: "{{ generate_report.output }}"
+
+notifications:
+  - on: completion
+    type: slack
+    channel: "#trading-alerts"
+    message: "Daily market scan completed. Check memory for insights."
+
+  - on: opportunity_found
+    type: slack
+    channel: "#trading-signals"
+    message: "High-quality trading opportunity identified: {{ opportunity }}"
