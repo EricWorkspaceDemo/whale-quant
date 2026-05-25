@@ -1,0 +1,109 @@
+name: Timing Strategy Workflow
+description: Quantitative timing strategy based on Ch05 (Dual MA, MACD, Hurst)
+triggered_by: user_request
+
+steps:
+  - name: data_collection
+    agent: data_fetcher
+    input:
+      asset_type: "{{ asset_type }}"
+      symbols: "{{ symbols }}"
+      time_range: "{{ time_range }}"
+      indicators: [OHLCV, volume]
+
+  - name: indicator_computation
+    agent: quant_engine
+    input:
+      market_data: "{{ data_collection.output }}"
+      indicators:
+        # Dual Moving Average
+        - ma_short: {{ ma_short_period }}
+        - ma_long: {{ ma_long_period }}
+        # MACD
+        - macd_fast: {{ macd_fast }}
+        - macd_slow: {{ macd_slow }}
+        - macd_signal: {{ macd_signal }}
+        # EMA calculations
+        - ema_periods: [12, 26, 50, 200]
+        # Hurst index calculation
+        - hurst_window: {{ hurst_window }}
+
+  - name: granville_signals
+    agent: strategist
+    depends_on: indicator_computation
+    input:
+      mode: "timing_analysis"
+      price_data: "{{ data_collection.output.price }}"
+      moving_averages: "{{ indicator_computation.output.ma }}"
+      ruleset: "granville_8_rules"
+
+  - name: macd_analysis
+    agent: strategist
+    depends_on: indicator_computation
+    input:
+      mode: "macd_timing"
+      macd_values: "{{ indicator_computation.output.macd }}"
+      check:
+        - crossover: "golden_death_cross"
+        - histogram_momentum: true
+        - divergence: true
+
+  - name: hurst_assessment
+    agent: quant_engine
+    depends_on: indicator_computation
+    input:
+      price_series: "{{ data_collection.output.price }}"
+      window: {{ hurst_window }}
+      output: hurst_index
+
+  - name: trend_classification
+    agent: strategist
+    depends_on:
+      - granville_signals
+      - macd_analysis
+      - hurst_assessment
+    input:
+      granville_signals: "{{ granville_signals.output }}"
+      macd_signals: "{{ macd_analysis.output }}"
+      hurst_index: "{{ hurst_assessment.output.hurst_index }}"
+
+    output_mapping:
+      trend_direction: ["uptrend", "downtrend", "sideways"]
+      regime: ["trending", "mean_reverting", "random_walk"]
+
+  - name: signal_confluence
+    agent: strategist
+    depends_on: trend_classification
+    input:
+      signals:
+        ma_crossover: "{{ granville_signals.output.crossover }}"
+        macd_signal: "{{ macd_analysis.output.signal }}"
+        trend_strength: "{{ trend_classification.output.trend_direction }}"
+        mean_reversion_prob: "{{ trend_classification.output.regime == 'mean_reverting' }}"
+      confluence_threshold: {{ confluence_threshold }}
+
+  - name: entry_exit_decision
+    agent: trader
+    depends_on: signal_confluence
+    input:
+      confluence_score: "{{ signal_confluence.output.score }}"
+      recommended_action: "{{ signal_confluence.output.action }}"
+      portfolio_state: "{{ portfolio_state }}"
+      risk_limits: "{{ risk_limits }}"
+
+  - name: store_timing_signal
+    action: store_memory
+    depends_on: entry_exit_decision
+    input:
+      type: timing_signal
+      data: "{{ entry_exit_decision.output }}"
+
+notifications:
+  - on: strong_signal
+    type: slack
+    channel: "#timing-signals"
+    message: "Strong timing signal detected: {{ entry_exit_decision.output.symbol }} - {{ entry_exit_decision.output.action }}"
+
+  - on: regime_change
+    type: alert
+    message: "Market regime change detected: {{ trend_classification.output.regime }}"

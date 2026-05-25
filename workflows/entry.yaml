@@ -1,5 +1,5 @@
 name: Trade Entry Workflow
-description: Complete workflow for identifying and entering a trade
+description: Complete workflow for identifying and entering a trade with multi-strategy support
 triggered_by: user_request
 
 steps:
@@ -7,16 +7,41 @@ steps:
     agent: strategist
     input:
       symbol: "{{ symbol }}"
-      strategy: "{{ strategy }}"
+      asset_type: "{{ asset_type }}"
+      strategy_mode: "{{ strategy_mode }}"
       market_data: "{{ market_data }}"
+
+    # Strategy mode-specific inputs
+    {{#if strategy_mode == "stock_selection"}}
+    input_overrides:
+      mode: "stock_selection"
+      stock_universe: "{{ stock_universe }}"
+      factors_to_consider: ["momentum", "PE", "PB", "ROE"]
+      factor_weights: "{{ factor_weights }}"
+    {{/if}}
+
+    {{#if strategy_mode == "timing"}}
+    input_overrides:
+      mode: "timing_analysis"
+      ma_short_period: {{ ma_short_period }}
+      ma_long_period: {{ ma_long_period }}
+      macd_config:
+        fast: {{ macd_fast }}
+        slow: {{ macd_slow }}
+        signal: {{ macd_signal }}
+      hurst_window: {{ hurst_window }}
+    {{/if}}
 
   - name: trader_decision
     agent: trader
     depends_on: validate_opportunity
     input:
       symbol: "{{ symbol }}"
-      strategy_confirmation: "{{ validate_opportunity.output }}"
+      asset_type: "{{ asset_type }}"
+      strategy_mode: "{{ strategy_mode }}"
+      opportunity_validation: "{{ validate_opportunity.output }}"
       current_price: "{{ current_price }}"
+      portfolio_state: "{{ portfolio_state }}"
 
   - name: risk_assessment
     agent: risk
@@ -25,6 +50,20 @@ steps:
       proposed_trade: "{{ trader_decision.output }}"
       portfolio: "{{ portfolio_state }}"
       limits: "{{ risk_limits }}"
+
+    # Mode-specific risk checks
+    {{#if strategy_mode == "stock_selection"}}
+    risk_checks:
+      max_position_concentration: {{ max_position_pct }}
+      sector_limit: "{{ sector_constraints }}"
+      min_sharpe_ratio: {{ min_sharpe }}
+    {{/if}}
+
+    {{#if strategy_mode == "timing"}}
+    risk_checks:
+      confluence_threshold: {{ confluence_threshold }}
+      regime_filter: "{{ allowed_regimes }}"
+    {{/if}}
 
   - name: approval_gate
     action: require_approval
@@ -38,7 +77,29 @@ steps:
     depends_on: approval_gate
     input:
       trade_plan: "{{ trader_decision.output }}"
-      execution_strategy: "market_order"
+      execution_strategy: "{{ execution_mode }}"
+
+    # Execution mode based on strategy
+    {{#if strategy_mode == "crypto"}}
+    execution_config:
+      order_type: "limit"
+      reduce_only: false
+      leverage: {{ leverage }}
+    {{/if}}
+
+    {{#if strategy_mode == "stock_selection"}}
+    execution_config:
+      order_type: "market"
+      pre_allocation_check: true
+    {{/if}}
+
+    {{#if strategy_mode == "timing"}}
+    execution_config:
+      trigger_based: true
+      trigger_conditions:
+        ma_cross_validated: true
+        macd_confirm: true
+    {{/if}}
 
   - name: confirm_entry
     action: store_memory
@@ -46,12 +107,17 @@ steps:
     input:
       type: trades
       data: "{{ execute_order.output }}"
+      strategy_mode: "{{ strategy_mode }}"
 
 notifications:
   - on: entry_executed
     type: slack
-    message: "Trade entered: {{ symbol }} {{ side }} @ {{ entry_price }}"
+    message: "Trade entered: {{ symbol }} {{ side }} @ {{ entry_price }} ({{ strategy_mode }})"
 
   - on: risk_warning
     type: alert
     message: "High risk trade: {{ risk_assessment.warning }}"
+
+  - on: low_confidence
+    type: notification
+    message: "Low confidence signal: {{ trader_decision.output.confidence }}% - Manual review recommended"
