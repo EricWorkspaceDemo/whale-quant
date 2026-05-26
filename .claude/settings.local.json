@@ -5,7 +5,22 @@
       "Bash(npm run *)",
       "Bash(npm start *)",
       "Bash(npx ts-node *)",
-      "Bash(npx skills *)"
+      "Bash(npx skills *)",
+      "Bash(touch __init__.py core/__init__.py indicators/__init__.py metrics/__init__.py strategies/__init__.py utils/__init__.py)",
+      "Bash(pip install *)",
+      "Bash(python -m pytest tests/test_order.py -v)",
+      "Bash(PYTHONPATH=/home/ericli/workspace/trading-os/src python -m pytest tests/test_order.py -v)",
+      "Bash(PYTHONPATH=/home/ericli/workspace/trading-os/src python -m pytest tests/test_order_impl.py -v)",
+      "Bash(PYTHONPATH=/home/ericli/workspace/trading-os/src python -m pytest tests/test_portfolio.py -v)",
+      "Bash(PYTHONPATH=/home/ericli/workspace/trading-os/src python -m pytest tests/test_metrics.py -v)",
+      "Bash(pip uninstall *)",
+      "Bash(PYTHONPATH=/home/ericli/workspace/trading-os/src python -m pytest tests/test_engine.py -v)",
+      "Bash(PYTHONPATH=/home/ericli/workspace/trading-os/src python -m pytest tests/test_strategies.py -v)",
+      "Bash(PYTHONPATH=/home/ericli/workspace/trading-os/src python -m pytest tests/ -v --tb=short)",
+      "Bash(PYTHONPATH=/home/ericli/workspace/trading-os/src python *)",
+      "Bash(pip list *)",
+      "Bash(python *)",
+      "Bash(pip show *)"
     ]
   }
 }

@@ -4,229 +4,212 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Context
 
-Trading OS is a multi-agent trading system that coordinates five specialized AI agents to analyze markets, develop strategies, execute trades, and manage risks. The system uses Claude AI with structured prompts and workflows to orchestrate complex trading decisions with built-in safety constraints.
+**WhaleQuant** (量化开源课程) is an educational quantitative finance course from Datawhale. It provides a complete learning journey from investment fundamentals to live trading, covering data acquisition, strategy research, backtesting, and paper trading. The content is delivered through Jupyter notebooks and documentation built with docsify.
 
-## System Architecture
+## High-Level Architecture
 
-### Core Agent Loop
+### Documentation Site (docs/)
 
-The system follows a structured approval chain:
+The main documentation is built with **docsify** and served statically:
+
+- `docs/index.html` - Entry point for the site
+- `docs/_sidebar.md` - Navigation structure
+- `docs/chXX_*` - Chapter folders containing markdown documentation and images
+
+To preview locally:
+```bash
+cd docs
+pip install docsify-cli
+docsify serve .
+```
+
+### Notebook Examples (notebook/)
+
+Jupyter notebooks mirroring the documentation chapters:
+
+| Folder | Topic |
+|--------|-------|
+| `ch01_投资与量化投资` | Investment basics and quantitative investing concepts |
+| `ch02_金融市场的基础概念` | Financial market fundamentals (macro, monetary, statistics) |
+| `ch03_股票数据获取` | Stock data acquisition using Tushare API |
+| `ch04_量化选股策略` | Quantitative stock selection strategies |
+| `ch05_量化择时策略` | Market timing strategies |
+| `ch06_量化调仓策略` | Portfolio rebalancing strategies |
+| `ch07_量化回测` | Backtesting framework and methodology |
+| `ch08_机器学习与量化策略` | Machine learning applications in quant strategies |
+
+### Learning Code (code/)
+
+Self-contained Python modules demonstrating concepts:
+
+- `code/ch03/` - Module examples including pandas operations, file I/O, NumPy integration, and custom modules
+- Key files: `lec_pd_dataframes.py`, `lec_pd_csv.py`, `lec_pd_indexing.py`, `lec_pd_joins.py`, `lec_fileio.py`
+
+### Risk Management Configuration (risk/)
+
+Trading constraint definitions for the educational trading system:
+
+- `risk/config.yaml` - Global limits (max positions, position size, leverage, risk per trade)
+- `risk/blacklist.json` - Forbidden trading symbols
+- `risk/limits.json` - Per-symbol position and leverage overrides
+
+### Prompt Templates (prompts/)
+
+AI prompt templates for agent-based trading workflows:
+
+- `prompts/system/` - Agent role definitions (strategist, trader, risk, execution, reviewer)
+- `prompts/user/` - User-facing entry points (market scan, open/close position, emergency)
+- `prompts/templates/` - JSON schemas for structured output (order plan, signal, journal)
+
+### Workflows (workflows/)
+
+YAML orchestration blueprints defining multi-step trading processes:
+
+- `daily_scan.yaml` - Scheduled daily market analysis workflow
+- `entry.yaml` - Position entry process with risk checks
+- `exit.yaml` - Position exit evaluation workflow
+- `emergency_stop.yaml` - Critical override to close all positions immediately
+
+### Backtest Framework (src/wave/)
+
+Wave 是一个轻量级量化回测框架，基于 docs/ch07 设计：
 
 ```
-Strategist (market analysis) 
-  ↓
-Trader (entry/exit signals) 
-  ↓
-Risk (constraint checking)
-  ↓
-Execution (order placement)
-  ↓
-Reviewer (performance analysis)
+src/wave/
+├── core/
+│   ├── engine.py        # 回测引擎
+│   ├── portfolio.py     # 资金管理
+│   └── order.py         # 订单管理
+├── metrics/
+│   └── evaluation.py    # 性能评估指标 (ch07.1)
+├── strategies/
+│   └── double_ma.py     # 双均线策略示例 (ch07.2-7.3)
+└── examples/
+    └── double_ma_example.py  # 使用示例
 ```
 
-Each agent:
-- Receives a system prompt from `prompts/system/*.md` defining its role and decision framework
-- Takes input from previous agents or workflow context
-- Returns structured output (markdown or JSON)
-- Must respect hard constraints from the Risk agent before execution
+主要功能:
+- 轻量级回测引擎（无复杂继承）
+- 完整评估指标体系（累计收益、年化收益、波动率、最大回撤、夏普比率等）
+- 经典策略示例（双均线策略）
+- 单标的和组合回测支持
+- CSV/Tushare API 数据源
 
-### Prompt Architecture
+使用方法:
+```python
+from wave import BacktestEngine, double_ma_strategy
 
-**System Prompts** (`prompts/system/`): Define agent roles and decision frameworks
-- Each agent has one system prompt loaded at initialization
-- Prompts define output format expectations
-- Format varies: Strategist uses markdown, Trader/Risk/Execution use structured fields
+engine = BacktestEngine(initial_cash=100000)
+engine.add_data('stock', df)
+result = engine.run(double_ma_strategy())
+print(result.metrics)
+```
 
-**User Prompts** (`prompts/user/`): Entry points for workflows with template variables
-- `market_scan.md` - Triggers daily analysis workflow
-- `open_position.md` - User request to enter a trade
-- `close_position.md` - Evaluate existing position for exit
-- `emergency.md` - Critical override to close all positions immediately
+运行示例:
+```bash
+cd src
+PYTHONPATH=. python wave/examples/double_ma_example.py
+```
 
-### Workflow System
+### Skills System (.agents/skills/)
 
-Workflows (`workflows/*.yaml`) are orchestration blueprints that:
-- Chain agents together with data flow (via `depends_on`)
-- Include conditional gates (approval steps, risk checks)
-- Define notifications (Slack, alerts)
-- Can be scheduled (daily_scan) or triggered by user/signal
+External skills imported from Binance's skills-hub:
 
-Example flow in `workflows/entry.yaml`:
-1. Strategist validates opportunity
-2. Trader makes decision → generates trade plan
-3. Risk assesses constraints → approves/rejects
-4. (If high risk) → approval_gate requires human sign-off
-5. Execution places order
-6. Trade stored in memory for later review
+```json
+// From skills-lock.json
+- binance/binance-skills-hub → binance SKILL.md (spot, futures, derivatives)
+- binance-web3/crypto-market-rank → crypto market rankings
+- binance-web3/query-token-audit → token contract auditing
+- binance-web3/query-token-info → token metadata queries
+```
 
-### Skills System
+Skills are referenced by agents during workflow execution via YAML templating syntax (`{{skill_name.method}}`).
 
-Skills (`skills/`) are reusable capability modules:
+## Dependencies
 
-**Binance Skills** (`skills/binance/`)
-- `futures.ts` - Market data fetching
-- `leverage.ts` - Margin management
-- `positions.ts` - Position lifecycle
-- `account.ts` - Balance/account info
+Python 3.9.x required due to dependency compatibility:
 
-**Market Skills** (`skills/market/`)
-- `funding.ts` - Funding rate analysis (identifies leverage extremes)
-- `whale.ts` - Liquidation levels and accumulation detection
-- `sentiment.ts` - Market regime detection
+```txt
+tushare==1.3.7    # Data acquisition API
+pandas==2.1.4     # Data manipulation
+numpy==1.26.3     # Numerical computing
+matplotlib==3.8.2 # Visualization
+```
 
-Skills are stateless utilities—agents call them to gather data before making decisions. Each skill returns structured data (arrays/objects).
+Install:
+```bash
+pip install -r requirements.txt
+```
 
-### Memory System
+## Running Notebooks
 
-Persistent storage organized by trading domain:
+Use Jupyter or JupyterLab:
 
-- `memory/market/` - Current market conditions, historical patterns
-- `memory/strategy/` - Strategy decisions and their rationale
-- `memory/trades/` - Executed trades, P&L, journals
+```bash
+pip install jupyter
+jupyter notebook notebook/
+jupyter lab notebook/
+```
 
-Workflow steps can `store_memory` to persist decisions for later review or cross-session context.
-
-### Risk Management (Critical Safety Layer)
-
-Risk decisions are **blocking**—agents upstream cannot override them.
-
-**Configuration** (`risk/`)
-- `config.yaml` - Hard limits: max positions (5), max position size ($10k), max leverage (10), risk per trade (2%)
-- `blacklist.json` - Forbidden symbols (new tokens, meme coins)
-- `limits.json` - Per-symbol overrides (BTC max $5k with 3x leverage; ALTCOINS max $1k with 2x)
-
-**Enforcement Points**
-- Risk agent must approve all trades before Execution
-- Position size and leverage checked against `limits.json`
-- Circuit breakers: halt trading if daily loss exceeds threshold
-- Emergency stop (`workflows/emergency_stop.yaml`) bypasses all gates and force-closes positions in 30s
-
-**Adding New Limits**
-1. Edit `risk/config.yaml` (global rules)
-2. Or `risk/limits.json` (per-symbol overrides)
-3. Risk agent checks both files; explicit symbol limits override defaults
+Or use Google Colab / Kaggle / other cloud notebooks.
 
 ## Development Workflow
 
-### Setup
+### For Adding New Chapter Content
 
-```bash
-# Install dependencies
-npm install
+1. Add markdown to `docs/chXX_Topic/Topic.md` for documentation
+2. Add corresponding notebook to `notebook/chXX_Topic/` with code examples
+3. Update `docs/_sidebar.md` navigation if needed
+4. Include any helper scripts in `code/chXX/` for self-contained examples
 
-# Copy environment template and fill in API keys
-cp .env.example .env  # Or create new with ANTHROPIC_API_KEY, BINANCE_API_KEY, BINANCE_API_SECRET
+### For Modifying Existing Notebooks
 
-# Start infrastructure (Redis, PostgreSQL)
-docker-compose up -d
+1. Open notebook in Jupyter Lab/Desktop
+2. Run cells sequentially to verify output
+3. Commit both `.ipynb` and any updated `*.png` references in docs
 
-# Verify services
-docker-compose ps
+### For Testing Trading Workflows
+
+Note: This is primarily educational; real trading requires careful configuration:
+
+1. Ensure `docker-compose.yml` services are up:
+   ```bash
+   docker-compose up -d redis postgres
+   ```
+
+2. Configure API credentials in `.env` (do not commit):
+   ```
+   TUSHARE_TOKEN=your_token
+   ANTHROPIC_API_KEY=your_key
+   BINANCE_API_KEY=your_key
+   BINANCE_API_SECRET=your_secret
+   ```
+
+3. Execute workflows via appropriate runner scripts (not present in repo - would need custom implementation)
+
+## File Organization Summary
+
+```
+trading-os/
+├── code/           # Self-contained Python module examples
+├── dashboards/     # Visualization dashboards
+├── data/           # Local data storage (gitignored)
+├── docs/           # Docsify static site
+├── logs/           # Runtime logs
+├── memory/         # Persistent trading state
+│   ├── market/
+│   ├── strategy/
+│   └── trades/
+├── notebook/       # Jupyter notebooks
+├── prompts/        # AI prompt templates
+├── resources/      # Images and static assets
+├── risk/           # Trading constraint configs
+└── workflows/      # Workflow orchestration YAMLs
 ```
 
-### Common Commands
+## Key Notes
 
-```bash
-# Development server (watches for changes, runs agents)
-npm run dev
-
-# Run all tests
-npm test
-
-# Run tests for a single agent or skill
-npm test -- agents/trader
-npm test -- skills/market/funding
-
-# Linting
-npm run lint
-
-# Linting with auto-fix
-npm run lint --fix
-
-# Build for production
-npm run build
-
-# Start production (requires build)
-npm start
-
-# View logs from a specific agent
-npm run logs -- strategist
-
-# Emergency: stop all trading immediately
-npm run emergency-stop
-
-# Clean up (stop Docker, clear logs)
-npm run clean
-```
-
-### Adding a New Agent
-
-1. Create `agents/myagent/agent.ts` with class extending base Agent
-2. Add system prompt at `prompts/system/myagent.md`
-3. Define input/output interface
-4. Add to workflow YAML (reference as `agent: myagent`)
-5. Test with `npm test -- agents/myagent`
-
-### Adding a New Skill
-
-1. Create `skills/domain/capability.ts` as stateless utility class
-2. Export methods that return structured data (arrays/objects)
-3. Agents call skill methods during processing
-4. Test independently; skills must not depend on agent state
-
-### Adding a Workflow
-
-1. Create `workflows/myworkflow.yaml`
-2. Define steps with `agent:` references and `depends_on:` chains
-3. Use `{{variable}}` syntax for templating
-4. Include `notifications:` for important events
-5. Deploy by referencing in agent initialization or scheduling
-
-## Code Patterns
-
-### TypeScript & Async
-- Use `async/await` throughout; no callback chains
-- Import Anthropic client: `import Anthropic from "@anthropic-ai/sdk"`
-- All API calls must have error handling (try/catch or .catch())
-
-### Agent Implementation
-- Accept structured input object (or workflow context)
-- Call Claude API with system prompt + user message
-- Parse response into expected output format
-- Return JSON or markdown as defined by system prompt
-
-### Skill Implementation
-- Stateless (no side effects, no stored state)
-- Accept parameters, return structured data
-- Mock in tests with hardcoded responses
-
-### Workflow Variables
-- Input params use `{{ param }}` syntax
-- Agent outputs referenced as `{{ agent_name.output }}`
-- Conditionals evaluate field values: `{{ risk_assessment.risk_level >= 'HIGH' }}`
-
-## Testing
-
-- **Unit tests**: Individual agent/skill behavior with mocked APIs
-- **Integration tests**: Full workflows with mock Binance responses
-- Mock responses in `tests/fixtures/` directory
-- All external API calls must be mocked (no live trading in tests)
-
-## Safety & Guardrails
-
-### Before Merging Code
-- All tests pass (`npm test`)
-- No hardcoded API keys (use .env)
-- Risk agent changes reviewed (changes to approval logic)
-- Emergency stop tested in staging
-
-### Blacklist & Symbol Restrictions
-- Edit `risk/blacklist.json` to forbid symbols
-- Traders cannot override—Risk agent checks on every trade
-- Emergency override only via `workflows/emergency_stop.yaml`
-
-### Observability
-- All agent decisions logged with reasoning
-- Workflow execution traced in `logs/`
-- Memory stores decisions for audit trail
-- P&L tracked per trade in reviewer journal
+- **Data Source**: Uses Tushare API for Chinese market data; requires token registration at tushare.pro
+- **Docsify Sidebar**: Edit `docs/_sidebar.md` when adding/removing chapter entries
+- **Git LFS**: Large image files may need Git LFS setup
+- **Educational Focus**: Primarily designed for learning; production deployment requires additional safety measures

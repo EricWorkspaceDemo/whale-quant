@@ -1,5 +1,5 @@
 name: Trade Exit Workflow
-description: Handle trade exits based on signals and management rules with multi-strategy support
+description: Handle trade exits based on signals and management rules
 triggered_by: signal_or_schedule
 
 steps:
@@ -8,7 +8,6 @@ steps:
     input:
       symbol: "{{ symbol }}"
       action: get_position
-      strategy_mode: "{{ strategy_mode }}"
 
   - name: evaluate_exit
     agent: trader
@@ -17,29 +16,6 @@ steps:
       position: "{{ check_position.output }}"
       current_price: "{{ current_price }}"
       entry_price: "{{ entry_price }}"
-      strategy_mode: "{{ strategy_mode }}"
-
-    # Mode-specific exit evaluation
-    {{#if strategy_mode == "stock_selection"}}
-    evaluation_focus:
-      factor_deterioration: true
-      sharpe_ratio_change: true
-      portfolio_rebalance_need: true
-    {{/if}}
-
-    {{#if strategy_mode == "timing"}}
-    evaluation_focus:
-      ma_crossover_reversal: true
-      macd_signal_loss: true
-      hurst_regime_change: true
-    {{/if}}
-
-    {{#if strategy_mode == "crypto"}}
-    evaluation_focus:
-      funding_rate_shift: true
-      liquidation_cluster_breach: true
-      whale_flow_reversal: true
-    {{/if}}
 
   - name: assess_risk
     agent: risk
@@ -47,7 +23,6 @@ steps:
     input:
       position: "{{ check_position.output }}"
       exit_signal: "{{ evaluate_exit.output }}"
-      risk_level: "{{ risk_assessment_level }}"
 
   - name: determine_action
     action: conditional
@@ -61,10 +36,6 @@ steps:
         action: execute_emergency_exit
       - condition: "{{ evaluate_exit.signal == 'HOLD' }}"
         action: monitor_position
-      - condition: "{{ evaluate_exit.factor_decay && evaluate_exit.factor_decay > threshold }}"
-        action: execute_full_exit
-      - condition: "{{ evaluate_exit.regime_change }}"
-        action: reduce_position
 
   - name: execute_exit
     agent: execution
@@ -73,33 +44,18 @@ steps:
       position: "{{ check_position.output }}"
       exit_type: "{{ determine_action.action }}"
       exit_reason: "{{ evaluate_exit.reason }}"
-      exit_percentage: "{{ determine_action.exit_pct }}"
 
   - name: review_trade
     agent: reviewer
     depends_on: execute_exit
     input:
       trade_result: "{{ execute_exit.output }}"
-      strategy_mode: "{{ strategy_mode }}"
-      review_metrics:
-        - pnl_percentage
-        - expected_vs_actual_sharpe
-        - signal_accuracy
-        - timing_quality
 
 notifications:
   - on: exit_completed
     type: slack
-    message: "Trade closed: {{ symbol }} P&L: {{ pnl }}% ({{ strategy_mode }})"
+    message: "Trade closed: {{ symbol }} P&L: {{ pnl }}%"
 
   - on: partial_exit
     type: log
     message: "Partial exit executed for {{ symbol }}"
-
-  - on: emergency_exit
-    type: alert
-    message: "EMERGENCY EXIT: {{ symbol }} - {{ assess_risk.risk_reason }}"
-
-  - on: strategy_degraded
-    type: notification
-    message: "{{ strategy_mode }} strategy signals degraded - Position reduced"
